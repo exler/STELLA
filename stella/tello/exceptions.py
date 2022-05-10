@@ -4,3 +4,11 @@ class TelloException(Exception):
 
 class TelloInvalidResponse(TelloException):
     pass
+
+
+class TelloNoConnection(TelloException):
+    pass
+
+
+class TelloNoState(TelloException):
+    pass

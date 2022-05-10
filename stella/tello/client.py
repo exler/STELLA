@@ -1,10 +1,14 @@
 import logging
 import socket
 import threading
+import time
 from enum import Enum
 from typing import Optional
 
-from stella.tello.exceptions import TelloInvalidResponse
+from stella.tello.constants import TELLO_CONTROL_PORT, TELLO_IP
+from stella.tello.exceptions import TelloException, TelloInvalidResponse, TelloNoState
+from stella.tello.state import TelloState
+from stella.tello.stream import TelloStream
 
 
 class TelloControlResponse(bytes, Enum):
@@ -20,36 +24,49 @@ class TelloFlipDirection(str, Enum):
 
 
 class TelloClient:
-    def __init__(
-        self,
-        local_ip: str,
-        local_port: int,
-        tello_ip: str = "192.168.10.1",
-        tello_port: int = 8889,
-        timeout: float = 0.5,
-    ) -> None:
-        self.tello_address = (tello_ip, tello_port)
+    def __init__(self, timeout: float = 3.0) -> None:
+        self.tello_address = (TELLO_IP, TELLO_CONTROL_PORT)
         self.timeout = timeout
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socket.bind((local_ip, local_port))
+        self.socket.bind(("", TELLO_CONTROL_PORT))
 
         self.response: Optional[bytes] = None
 
-        self.receive_thread = threading.Thread(target=self.receive)
-        self.receive_thread.daemon = True
+        self.receive_thread = threading.Thread(target=self._receive, name="TelloControlReceiver", daemon=True)
         self.receive_thread.start()
+
+        self.state = TelloState()
+        self.stream: Optional[TelloStream] = None
 
     def __del__(self) -> None:
         self.socket.close()
 
-    def receive(self) -> None:
+    def _receive(self) -> None:
         while True:
             try:
-                self.response, _ = self.socket.recvfrom(256)
+                self.response, _ = self.socket.recvfrom(1024)
+                logging.debug("Control data received")
             except Exception:
                 logging.error("Unknown error occurred", exc_info=True)
                 break
+
+    def connect(self, wait_for_state: bool = True) -> None:
+        try:
+            self.send("command")  # Enable SDK mode
+        except TimeoutError:
+            raise TelloException("Could not enable SDK mode")
+
+        if wait_for_state:
+            for i in range(10):
+                if self.state.get_state():
+                    logging.debug(f"Tello state received on {i+1} iteration")
+                    break
+
+                time.sleep(0.1)
+
+            if not self.state.get_state():
+                raise TelloNoState("Did not receive a state packet from Tello")
 
     def send(self, command: str) -> str:
         def raise_timeout() -> None:
@@ -62,12 +79,11 @@ class TelloClient:
         timer.start()
 
         while self.response is None:
-            pass
+            time.sleep(0.1)
 
         timer.cancel()
 
-        response = self.response.decode("utf-8")
-        self.response = None
+        response, self.response = self.response, None
 
         return response
 
@@ -94,14 +110,18 @@ class TelloClient:
         Enable video stream.
         """
 
-        return TelloControlResponse(self.send("streamon"))
+        response = TelloControlResponse(self.send("streamon"))
+        self.stream = TelloStream()
+        return response
 
     def disable_stream(self) -> TelloControlResponse:
         """
         Disable video stream.
         """
 
-        return TelloControlResponse(self.send("streamoff"))
+        response = TelloControlResponse(self.send("streamoff"))
+        self.stream = None
+        return response
 
     def emergency(self) -> TelloControlResponse:
         """

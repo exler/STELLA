@@ -19,4 +19,7 @@ class TelloStream:
         while True:
             success, frame = self.video.read()
             if success:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                frame = cv2.flip(frame, 0)
                 self.frame = frame

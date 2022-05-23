@@ -5,7 +5,7 @@ import time
 from enum import Enum
 from typing import Optional
 
-from stella.tello.constants import TELLO_CONTROL_PORT, TELLO_IP
+from stella.tello.constants import RESPONSE_TIMEOUT, TELLO_CONTROL_PORT, TELLO_IP, TIME_BETWEEN_COMMANDS
 from stella.tello.exceptions import TelloException, TelloInvalidResponse, TelloNoState
 from stella.tello.state import TelloState
 from stella.tello.stream import TelloStream
@@ -24,14 +24,14 @@ class TelloFlipDirection(str, Enum):
 
 
 class TelloClient:
-    def __init__(self, timeout: float = 3.0) -> None:
+    def __init__(self) -> None:
         self.tello_address = (TELLO_IP, TELLO_CONTROL_PORT)
-        self.timeout = timeout
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind(("", TELLO_CONTROL_PORT))
 
         self.response: Optional[bytes] = None
+        self.last_received_timestamp: float = 0
 
         self.receive_thread = threading.Thread(target=self._receive, name="TelloControlReceiver", daemon=True)
         self.receive_thread.start()
@@ -69,20 +69,19 @@ class TelloClient:
                 raise TelloNoState("Did not receive a state packet from Tello")
 
     def send(self, command: str) -> str:
-        def raise_timeout() -> None:
-            raise TimeoutError("Tello did not respond in time")
-
-        timer = threading.Timer(self.timeout, raise_timeout)
+        diff = time.time() - self.last_received_timestamp
+        if diff < TIME_BETWEEN_COMMANDS:
+            time.sleep(diff)
 
         self.socket.sendto(command.encode("utf-8"), self.tello_address)
-
-        timer.start()
+        timestamp = time.time()
 
         while self.response is None:
+            if time.time() - timestamp > RESPONSE_TIMEOUT:
+                raise TimeoutError("Tello did not respond in time")
             time.sleep(0.1)
 
-        timer.cancel()
-
+        self.last_received_timestamp = time.time()
         response, self.response = self.response, None
 
         return response

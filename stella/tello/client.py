@@ -5,8 +5,14 @@ import time
 from enum import Enum
 from typing import Optional
 
-from stella.tello.constants import RESPONSE_TIMEOUT, TELLO_CONTROL_PORT, TELLO_IP, TIME_BETWEEN_COMMANDS
-from stella.tello.exceptions import TelloException, TelloInvalidResponse, TelloNoState
+from stella.tello.constants import (
+    RESPONSE_TIMEOUT,
+    TELLO_CONTROL_PORT,
+    TELLO_IP,
+    TIME_BETWEEN_SAFE_COMMANDS,
+    TIME_BETWEEN_UNSAFE_COMMANDS,
+)
+from stella.tello.exceptions import TelloInvalidResponse, TelloNoConnection, TelloNoState
 from stella.tello.state import TelloState
 from stella.tello.stream import TelloStream
 
@@ -32,6 +38,7 @@ class TelloClient:
 
         self.response: Optional[bytes] = None
         self.last_received_timestamp: float = 0
+        self.last_unsafe_command: float = 0
 
         self.receive_thread = threading.Thread(target=self._receive, name="TelloControlReceiver", daemon=True)
         self.receive_thread.start()
@@ -46,16 +53,16 @@ class TelloClient:
         while True:
             try:
                 self.response, _ = self.socket.recvfrom(1024)
-                logging.debug("Control data received")
+                logging.debug(f"Control data received: {self.response}")
             except Exception:
                 logging.error("Unknown error occurred", exc_info=True)
                 break
 
     def connect(self, wait_for_state: bool = True) -> None:
         try:
-            self.send("command")  # Enable SDK mode
+            self.send_safe("command")  # Enable SDK mode
         except TimeoutError:
-            raise TelloException("Could not enable SDK mode")
+            raise TelloNoConnection("Could not enable SDK mode")
 
         if wait_for_state:
             for i in range(10):
@@ -68,9 +75,9 @@ class TelloClient:
             if not self.state.get_state():
                 raise TelloNoState("Did not receive a state packet from Tello")
 
-    def send(self, command: str) -> str:
+    def send_safe(self, command: str) -> str:
         diff = time.time() - self.last_received_timestamp
-        if diff < TIME_BETWEEN_COMMANDS:
+        if diff < TIME_BETWEEN_SAFE_COMMANDS:
             time.sleep(diff)
 
         self.socket.sendto(command.encode("utf-8"), self.tello_address)
@@ -86,30 +93,36 @@ class TelloClient:
 
         return response
 
+    def send_unsafe(self, command: str) -> None:
+        diff = time.time() - self.last_unsafe_command
+        if diff > TIME_BETWEEN_UNSAFE_COMMANDS:
+            self.socket.sendto(command.encode("utf-8"), self.tello_address)
+            self.last_unsafe_command = time.time()
+
     """
     Control Commands
     """
 
-    def takeoff(self) -> TelloControlResponse:
+    def takeoff(self) -> None:
         """
         Auto takeoff.
         """
 
-        return TelloControlResponse(self.send("takeoff"))
+        self.send_unsafe("takeoff")
 
-    def land(self) -> TelloControlResponse:
+    def land(self) -> None:
         """
         Auto landing.
         """
 
-        return TelloControlResponse(self.send("land"))
+        self.send_unsafe("land")
 
     def enable_stream(self) -> TelloControlResponse:
         """
         Enable video stream.
         """
 
-        response = TelloControlResponse(self.send("streamon"))
+        response = TelloControlResponse(self.send_safe("streamon"))
         self.stream = TelloStream()
         return response
 
@@ -118,7 +131,7 @@ class TelloClient:
         Disable video stream.
         """
 
-        response = TelloControlResponse(self.send("streamoff"))
+        response = TelloControlResponse(self.send_safe("streamoff"))
         self.stream = None
         return response
 
@@ -127,46 +140,46 @@ class TelloClient:
         Stop motors immediately.
         """
 
-        return TelloControlResponse(self.send("emergency"))
+        return TelloControlResponse(self.send_safe("emergency"))
 
     def up(self, x: int) -> TelloControlResponse:
         if x < 20 or x > 500:
             raise ValueError("Value must be in range (20;500)")
 
-        return TelloControlResponse(self.send(f"up {x}"))
+        return TelloControlResponse(self.send_safe(f"up {x}"))
 
     def down(self, x: int) -> TelloControlResponse:
         if x < 20 or x > 500:
             raise ValueError("Value must be in range (20;500)")
 
-        return TelloControlResponse(self.send(f"down {x}"))
+        return TelloControlResponse(self.send_safe(f"down {x}"))
 
     def left(self, x: int) -> TelloControlResponse:
         if x < 20 or x > 500:
             raise ValueError("Value must be in range (20;500)")
 
-        return TelloControlResponse(self.send(f"left {x}"))
+        return TelloControlResponse(self.send_safe(f"left {x}"))
 
     def right(self, x: int) -> TelloControlResponse:
         if x < 20 or x > 500:
             raise ValueError("Value must be in range (20;500)")
 
-        return TelloControlResponse(self.send(f"right {x}"))
+        return TelloControlResponse(self.send_safe(f"right {x}"))
 
     def cw(self, x: int) -> TelloControlResponse:
         if x < 1 or x > 360:
             raise ValueError("Value must be in range (1;360)")
 
-        return TelloControlResponse(self.send(f"cw {x}"))
+        return TelloControlResponse(self.send_safe(f"cw {x}"))
 
     def ccw(self, x: int) -> TelloControlResponse:
         if x < 1 or x > 360:
             raise ValueError("Value must be in range (1;360)")
 
-        return TelloControlResponse(self.send(f"ccw {x}"))
+        return TelloControlResponse(self.send_safe(f"ccw {x}"))
 
     def flip(self, x: TelloFlipDirection) -> TelloControlResponse:
-        return TelloControlResponse(self.send(f"flip {x.value}"))
+        return TelloControlResponse(self.send_safe(f"flip {x.value}"))
 
     def go(self, x: int, y: int, z: int, speed: int) -> TelloControlResponse:
         if any(v for v in [x, y, z] if v < -500 or x > 500):
@@ -175,7 +188,7 @@ class TelloClient:
         if speed < 10 or speed > 100:
             raise ValueError("Speed must be in range(10;100)")
 
-        return TelloControlResponse(self.send(f"go {x} {y} {z} {speed}"))
+        return TelloControlResponse(self.send_safe(f"go {x} {y} {z} {speed}"))
 
     def stop(self) -> TelloControlResponse:
         """
@@ -185,7 +198,7 @@ class TelloClient:
             Works at any time.
         """
 
-        return TelloControlResponse(self.send("stop"))
+        return TelloControlResponse(self.send_safe("stop"))
 
     def curve(self, x1: int, y1: int, z1: int, x2: int, y2: int, z2: int, speed: int) -> TelloControlResponse:
         if any(v for v in [x1, y1, z1, x2, y2, z2] if v < -500 or v > 500):
@@ -194,7 +207,7 @@ class TelloClient:
         if speed < 10 or speed > 100:
             raise ValueError("Speed must be in range(10;100)")
 
-        return TelloControlResponse(self.send(f"curve {x1} {y1} {z1} {x2} {y2} {z2} {speed}"))
+        return TelloControlResponse(self.send_safe(f"curve {x1} {y1} {z1} {x2} {y2} {z2} {speed}"))
 
     """
     Set Commands
@@ -204,9 +217,9 @@ class TelloClient:
         if x < 10 or x > 100:
             raise ValueError("Speed must be in range (10;100)")
 
-        return TelloControlResponse(self.send(f"speed {x}"))
+        return TelloControlResponse(self.send_safe(f"speed {x}"))
 
-    def set_rc(self, a: int, b: int, c: int, d: int) -> TelloControlResponse:
+    def set_rc(self, a: int, b: int, c: int, d: int) -> None:
         """
         Set remote controller control via four channels.
 
@@ -220,60 +233,28 @@ class TelloClient:
         if any(x for x in [a, b, c, d] if x < -100 or x > 100):
             raise ValueError("Parameters must be in range (-100;100)")
 
-        return TelloControlResponse(self.send(f"rc {a} {b} {c} {d}"))
+        return self.send_unsafe(f"rc {a} {b} {c} {d}")
 
     def set_wifi(self, ssid: str, password: str) -> TelloControlResponse:
         """
         Set Wi-Fi SSID and password.
         """
 
-        return TelloControlResponse(self.send(f"wifi {ssid} {password}"))
-
-    def set_mon(self) -> TelloControlResponse:
-        """
-        Enable mission pad detection (both forward and downward detection).
-        """
-
-        return TelloControlResponse(self.send("mon"))
-
-    def set_moff(self) -> TelloControlResponse:
-        """
-        Disable mission pad detection.
-        """
-
-        return TelloControlResponse(self.send("moff"))
-
-    def set_mdirection(self, x: int) -> TelloControlResponse:
-        """
-        Set detection mode.
-
-        0 = Enable downward detection only
-        1 = Enable forward detection only
-        2 = Enable both forward and downward detection
-
-        Notes:
-            Perform "mon" command before performing this command.
-            The detection frequency is 20 Hz if only the forward or downward detection is enabled.
-            If both detections are enabled, the detection frequency is 10 Hz.
-        """
-        if x not in [0, 1, 2]:
-            raise ValueError("Mode must be in [0, 1, 2]")
-
-        return TelloControlResponse(self.send(f"mdirection {x}"))
+        return TelloControlResponse(self.send_safe(f"wifi {ssid} {password}"))
 
     def set_ap(self, ssid: str, password: str) -> TelloControlResponse:
         """
         Set the Tello to station mode and connect to a new access point with the specified SSID and password.
         """
 
-        return TelloControlResponse(self.send(f"ap {ssid} {password}"))
+        return TelloControlResponse(self.send_safe(f"ap {ssid} {password}"))
 
     """
     Read Commands
     """
 
     def get_speed(self) -> float:
-        response = self.send("speed?")
+        response = self.send_safe("speed?")
 
         try:
             return float(response)
@@ -281,7 +262,7 @@ class TelloClient:
             raise TelloInvalidResponse("get_speed returned non-float")
 
     def get_battery(self) -> int:
-        response = self.send("battery?")
+        response = self.send_safe("battery?")
 
         try:
             return int(response)
@@ -291,7 +272,7 @@ class TelloClient:
     def get_flight_time(self) -> int:
         """Gets current flight time in seconds."""
 
-        response = self.send("time?")
+        response = self.send_safe("time?")
 
         try:
             return int(response)
@@ -301,7 +282,7 @@ class TelloClient:
     def get_wifi(self) -> int:
         """Gets WiFi SNR (signal-to-noise ratio, signal strength)."""
 
-        response = self.send("wifi?")
+        response = self.send_safe("wifi?")
 
         try:
             return int(response)
@@ -311,9 +292,9 @@ class TelloClient:
     def get_sdk(self) -> str:
         """Gets Tello SDK version."""
 
-        return self.send("sdk?")
+        return self.send_safe("sdk?")
 
     def get_sn(self) -> str:
         """Gets Tello serial number."""
 
-        return self.send("sn?")
+        return self.send_safe("sn?")

@@ -15,8 +15,11 @@ class Window:
 
         pygame.init()
 
+        icon = pygame.image.load("stella/gui/assets/favicon.png")
+
         self.display = pygame.display.set_mode(resolution)
         pygame.display.set_caption(title)
+        pygame.display.set_icon(icon)
 
         self.tello = TelloClient()
         self.tello.connect()

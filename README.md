@@ -26,6 +26,7 @@ $ poetry run python3 -m stella
 * Arrow keys up/down - fly up/down
 * Space - takeoff
 * Enter - land
+* O/P - decrease/increase speed
 
 ## License
 

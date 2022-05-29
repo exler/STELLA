@@ -18,6 +18,10 @@ class KeyboardHandler:
 
         self.send_rc_command = False
 
+    def change_speed(self, change: int) -> None:
+        if 0 < self.S + change <= 100:
+            self.S += change
+
     def handle(self, event: pygame.event.Event) -> None:
         if event.type == pygame.KEYDOWN:
             self.keydown(event.key)
@@ -60,6 +64,12 @@ class KeyboardHandler:
         elif key == pygame.K_RIGHT:
             logging.debug("ROTATE RIGHT")
             self.yaw_velocity = self.S
+        elif key == pygame.K_p:
+            logging.debug("INCREASE SPEED")
+            self.change_speed(10)
+        elif key == pygame.K_o:
+            logging.debug("DECREASE SPEED")
+            self.change_speed(-10)
         elif key == pygame.K_SPACE:
             logging.debug("TAKEOFF")
             self.tello.takeoff()

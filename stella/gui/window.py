@@ -7,6 +7,7 @@ os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 import pygame
 from stella.gui.controls import KeyboardHandler
 from stella.tello.client import TelloClient
+from stella.tello.exceptions import TelloInvalidResponse
 
 
 class Window:
@@ -52,11 +53,21 @@ class Window:
         self.battery_image.convert_alpha()
         self.battery_rect = self.battery_image.get_rect(center=(self.resolution[0] - 72, 32))
 
+        self.speed_image = pygame.image.load("stella/gui/assets/speed.png")
+        self.speed_image.convert_alpha()
+        self.speed_rect = self.speed_image.get_rect(center=(self.resolution[0] - 72, 96))
+
     def draw_battery_level(self) -> None:
         battery_level_text = self.font.render(f"{self.battery_level}%", True, (255, 255, 255, 255))
         battery_level_rect = battery_level_text.get_rect(center=(self.resolution[0] - 56, 32))
         self.display.blit(self.battery_image, self.battery_rect)
         self.display.blit(battery_level_text, battery_level_rect)
+
+    def draw_current_speed(self) -> None:
+        current_speed_text = self.font.render(f"{self.event_handler.S}", True, (255, 255, 255, 255))
+        current_speed_rect = current_speed_text.get_rect(center=(self.resolution[0] - 56, 96))
+        self.display.blit(self.speed_image, self.speed_rect)
+        self.display.blit(current_speed_text, current_speed_rect)
 
     def draw_controls(self) -> None:
         width, height = self.resolution
@@ -118,9 +129,12 @@ class Window:
                 self.display.blit(self.logo_image, self.logo_rect)
                 self.draw_controls()
                 self.draw_battery_level()
+                self.draw_current_speed()
                 pygame.display.update()
 
                 time.sleep(1 / self.fps)
             except KeyboardInterrupt:
                 logging.debug("Program terminated by user")
                 break
+            except TelloInvalidResponse:
+                pass

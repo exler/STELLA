@@ -10,6 +10,7 @@ python = "^3.9"
 pygame = "^2.1.2"
 av = "^9.2.0"
 numpy = "^1.22.4"
+Pillow = "^9.1.1"
 
 [tool.poetry.dev-dependencies]
 ipython = "^8.2.0"

@@ -27,6 +27,7 @@ $ poetry run python3 -m stella
 * Space - takeoff
 * Enter - land
 * O/P - decrease/increase speed
+* F12 - save photo
 
 ## License
 

@@ -2,6 +2,7 @@ import logging
 
 import pygame
 from stella.tello.client import TelloClient
+from stella.utils.files import save_photo
 
 
 class KeyboardHandler:
@@ -78,6 +79,10 @@ class KeyboardHandler:
             logging.debug("LAND")
             self.tello.land()
             self.send_rc_command = False
+        elif key == pygame.K_F12:
+            logging.debug("TAKE PHOTO")
+            if self.tello.stream.frame is not None:
+                save_photo(self.tello.stream.frame)
 
     def keyup(self, key: int) -> None:
         if key == pygame.K_w or key == pygame.K_s:

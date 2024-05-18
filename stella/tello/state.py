@@ -36,7 +36,9 @@ class TelloState:
 
         self._state: Optional[str] = None
 
-        self.receive_thread = threading.Thread(target=self._receive_state, name="TelloStateReceiver", daemon=True)
+        self.receive_thread = threading.Thread(
+            target=self._receive_state, name="TelloStateReceiver", daemon=True
+        )
         self.receive_thread.start()
 
     def _receive_state(self) -> None:

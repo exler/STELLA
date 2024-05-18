@@ -12,7 +12,11 @@ from stella.tello.constants import (
     TIME_BETWEEN_SAFE_COMMANDS,
     TIME_BETWEEN_UNSAFE_COMMANDS,
 )
-from stella.tello.exceptions import TelloInvalidResponse, TelloNoConnection, TelloNoState
+from stella.tello.exceptions import (
+    TelloInvalidResponse,
+    TelloNoConnection,
+    TelloNoState,
+)
 from stella.tello.state import TelloState
 from stella.tello.stream import TelloStream
 
@@ -40,7 +44,9 @@ class TelloClient:
         self.last_received_timestamp: float = 0
         self.last_unsafe_command: float = 0
 
-        self.receive_thread = threading.Thread(target=self._receive, name="TelloControlReceiver", daemon=True)
+        self.receive_thread = threading.Thread(
+            target=self._receive, name="TelloControlReceiver", daemon=True
+        )
         self.receive_thread.start()
 
         self.state = TelloState()
@@ -200,14 +206,18 @@ class TelloClient:
 
         return TelloControlResponse(self.send_safe("stop"))
 
-    def curve(self, x1: int, y1: int, z1: int, x2: int, y2: int, z2: int, speed: int) -> TelloControlResponse:
+    def curve(
+        self, x1: int, y1: int, z1: int, x2: int, y2: int, z2: int, speed: int
+    ) -> TelloControlResponse:
         if any(v for v in [x1, y1, z1, x2, y2, z2] if v < -500 or v > 500):
             raise ValueError("Coordinates must be in range (-500;500)")
 
         if speed < 10 or speed > 100:
             raise ValueError("Speed must be in range(10;100)")
 
-        return TelloControlResponse(self.send_safe(f"curve {x1} {y1} {z1} {x2} {y2} {z2} {speed}"))
+        return TelloControlResponse(
+            self.send_safe(f"curve {x1} {y1} {z1} {x2} {y2} {z2} {speed}")
+        )
 
     """
     Set Commands

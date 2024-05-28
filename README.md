@@ -1,11 +1,6 @@
 <p align="center">
     <img src="stella/gui/assets/logo.png" width="256">
     <p align="center">Ryze Tello desktop controller</p>
-    <p align="center">
-        <img src="https://img.shields.io/badge/Drone-Ryze Tello-lightblue">
-        <img src="https://img.shields.io/badge/python-3.9%2B-gold?style=flat-square&logo=python&logoColor=gold">
-        <img src="https://img.shields.io/github/license/EXLER/pixette?style=flat-square">
-    </p>
 </p>
 
 ## Usage
